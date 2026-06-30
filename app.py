@@ -1,5 +1,15 @@
 import os
+import sys
 import tempfile
+
+# --- Fix for Streamlit Cloud: it ships an old SQLite version that
+# ChromaDB rejects. This swaps in a newer bundled SQLite before
+# chromadb is imported anywhere. Safe to keep even if not needed locally.
+try:
+    __import__("pysqlite3")
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
 
 import streamlit as st
 from dotenv import load_dotenv
