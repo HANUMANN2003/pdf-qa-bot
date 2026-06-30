@@ -261,6 +261,11 @@ def build_vectorstore(file_bytes, file_name):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(documents)
 
+    os.unlink(tmp_path)
+
+    if not chunks:
+        return None, len(documents), 0
+
     embeddings = get_embedding_model()
     vectorstore = Chroma.from_documents(
         documents=chunks,
@@ -268,7 +273,6 @@ def build_vectorstore(file_bytes, file_name):
         collection_name=f"pdf_{abs(hash(file_name))}",
     )
 
-    os.unlink(tmp_path)
     return vectorstore, len(documents), len(chunks)
 
 
@@ -279,6 +283,15 @@ if uploaded_file:
 
     with st.spinner("Indexing document — splitting, embedding, storing in ChromaDB..."):
         vectorstore, num_pages, num_chunks = build_vectorstore(file_bytes, uploaded_file.name)
+
+    if vectorstore is None:
+        st.error(
+            "No readable text was found in this PDF. This usually means it's a "
+            "**scanned document** (pages are images, not real text) rather than a "
+            "text-based PDF. Try a different file, or run OCR on it first to "
+            "convert the scanned pages into selectable text."
+        )
+        st.stop()
 
     st.markdown(f"""
     <div class="dq-stats">
