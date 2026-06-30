@@ -29,16 +29,20 @@ st.set_page_config(page_title="PDF Q&A System", page_icon="📄", layout="center
 st.title("📄 PDF Question Answering System")
 st.caption("Upload a PDF, ask questions, get answers with source references.")
 
-# Let the user paste an API key if it's not already set as an env var
-# (useful for Streamlit Cloud deployment using st.secrets, or local testing)
-api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None) if hasattr(st, "secrets") else os.getenv("OPENAI_API_KEY")
+# Load API key: try Streamlit secrets first (cloud), then env var (local .env)
+api_key = None
+try:
+    api_key = st.secrets["OPENAI_API_KEY"]
+except Exception:
+    api_key = os.getenv("OPENAI_API_KEY")
 
 with st.sidebar:
     st.header("Settings")
     if not api_key:
         api_key = st.text_input("OpenAI API Key", type="password")
     else:
-        st.success("API key loaded ✅")
+        masked = api_key[:7] + "..." + api_key[-4:] if len(api_key) > 12 else "****"
+        st.success(f"API key loaded ✅ ({masked})")
     st.markdown("---")
     st.markdown(
         "**How it works**\n\n"
