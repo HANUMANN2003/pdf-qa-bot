@@ -16,7 +16,8 @@ from dotenv import load_dotenv
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 
@@ -29,17 +30,17 @@ st.set_page_config(page_title="PDF Q&A System", page_icon="📄", layout="center
 st.title("📄 PDF Question Answering System")
 st.caption("Upload a PDF, ask questions, get answers with source references.")
 
-# Load API key: try Streamlit secrets first (cloud), then env var (local .env)
+# Load Groq API key: try Streamlit secrets first (cloud), then env var (local .env)
 api_key = None
 try:
-    api_key = st.secrets["OPENAI_API_KEY"]
+    api_key = st.secrets["GROQ_API_KEY"]
 except Exception:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
 
 with st.sidebar:
     st.header("Settings")
     if not api_key:
-        api_key = st.text_input("OpenAI API Key", type="password")
+        api_key = st.text_input("Groq API Key", type="password")
     else:
         masked = api_key[:7] + "..." + api_key[-4:] if len(api_key) > 12 else "****"
         st.success(f"API key loaded ✅ ({masked})")
@@ -48,22 +49,29 @@ with st.sidebar:
         "**How it works**\n\n"
         "1. Upload a PDF\n"
         "2. We split it into chunks\n"
-        "3. Each chunk is embedded into vectors\n"
+        "3. Each chunk is embedded into vectors (free, local model)\n"
         "4. Stored in a local ChromaDB\n"
         "5. Your question retrieves the closest chunks\n"
-        "6. An LLM answers using only those chunks"
+        "6. Groq's LLM answers using only those chunks"
     )
 
 if not api_key:
-    st.warning("Please enter your OpenAI API key in the sidebar to continue.")
+    st.warning("Please enter your Groq API key in the sidebar to continue.")
+    st.info("Get a free key at https://console.groq.com/keys")
     st.stop()
 
-os.environ["OPENAI_API_KEY"] = api_key
+os.environ["GROQ_API_KEY"] = api_key
 
 # ---------------------------------------------------------
 # File upload
 # ---------------------------------------------------------
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+
+@st.cache_resource(show_spinner=False)
+def get_embedding_model():
+    """Loads a free, local embedding model (downloads once, then cached)."""
+    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
 
 @st.cache_resource(show_spinner=False)
 def build_vectorstore(file_bytes, file_name):
@@ -80,7 +88,7 @@ def build_vectorstore(file_bytes, file_name):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(documents)
 
-    embeddings = OpenAIEmbeddings()
+    embeddings = get_embedding_model()
     vectorstore = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
@@ -94,7 +102,7 @@ def build_vectorstore(file_bytes, file_name):
 if uploaded_file:
     file_bytes = uploaded_file.read()
 
-    with st.spinner("Reading and indexing your PDF... (this may take a moment)"):
+    with st.spinner("Reading and indexing your PDF... (first run downloads the embedding model, ~1 min)"):
         vectorstore, num_pages, num_chunks = build_vectorstore(file_bytes, uploaded_file.name)
 
     st.success(f"Indexed {num_pages} pages → {num_chunks} chunks. Ready for questions!")
@@ -102,7 +110,7 @@ if uploaded_file:
     question = st.text_input("Ask a question about your PDF:")
 
     if question:
-        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
             retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
