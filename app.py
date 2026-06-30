@@ -41,9 +41,6 @@ with st.sidebar:
     st.header("Settings")
     if not api_key:
         api_key = st.text_input("Groq API Key", type="password")
-    else:
-        masked = api_key[:7] + "..." + api_key[-4:] if len(api_key) > 12 else "****"
-        st.success(f"API key loaded ✅ ({masked})")
     st.markdown("---")
     st.markdown(
         "**How it works**\n\n"
